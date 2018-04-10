@@ -7,6 +7,7 @@ output:
   html_notebook: default
 ---
 ```{r setup, echo = FALSE, warning=FALSE, message=FALSE, cache=FALSE}
+library(cowplot)
 library(tidyverse)
 library(sf)
 library(leaflet)
@@ -18,7 +19,7 @@ states_file     <- 'STATE'
 
 lakes_poly <- st_read(gdb, lakes_poly_file, stringsAsFactors = FALSE)
 lakes_poly <- lakes_poly %>%
-  st_zm(drop=TRUE) %>%
+  st_zm(drop = TRUE) %>%
   filter(Hectares >= 4) %>%
   mutate(FCode = factor(FCode)) %>%
   mutate(FType = factor(FType)) %>%
@@ -28,9 +29,7 @@ states <- st_read(gdb, states_file) %>%
   st_simplify(TRUE, 5000)
 ```
 
-I'll use the `multiplot` function from the [Cookbook for R](http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/) site with an [adaptation to add a title](http://www.guru-gis.net/multiplot-function-for-ggplot/).
-```{r_functions, echo=FALSE, warning=FALSE, message=FALSE}
-
+```{r functions, echo=FALSE, warning=FALSE, message=FALSE}
 # Create a list of ggplots where the polygons share a common (largest) bbox size
 # Adapted from: http://rstudio-pubs-static.s3.amazonaws.com/2852_379274d7c5734f979e106dcf019ec46c.html
 stage_plots <- function(data, region = NULL, size = c("maxzoom", "scale")) {
@@ -65,68 +64,10 @@ stage_plots <- function(data, region = NULL, size = c("maxzoom", "scale")) {
   }
   return(plots)
 }
-
-## From R cookbook
-# Multiple plot function
-#
-# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
-# - cols:   Number of columns in layout
-# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
-#
-# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
-# then plot 1 will go in the upper left, 2 will go in the upper right, and
-# 3 will go all the way across the bottom.
-#
-multiplot <- function(..., plotlist = NULL, file, cols = 1, layout = NULL, 
-                      title = "") {
-  require(grid)
-  plots    <- c(list(...), plotlist)
-  numPlots <- length(plots)
- 
-  # If layout is NULL, then use 'cols' to determine layout
-  if(is.null(layout)){
-    layout <- matrix(seq(1, cols * ceiling(numPlots / cols)),
-                     ncol = cols, nrow = ceiling(numPlots/cols))
-  }
- 
-  if(nchar(title) > 0){
-    layout <- rbind(rep(0, ncol(layout)), layout)
-  }
- 
-  if(numPlots == 1){
-    print(plots[[1]])
-  }else{
-    grid.newpage()
-    
-    pushViewport(viewport(
-      layout = grid.layout(
-                      nrow(layout), 
-                      ncol(layout), 
-                      heights = if(nchar(title) > 0){
-                                    unit(c(0.5, rep(5, nrow(layout) - 1)), "null") 
-                                  }else{
-                                    unit(c(rep(5, nrow(layout))), "null")
-                                  })))
- 
-    # Make each plot, in the correct location
-    if(nchar(title) > 0){
-      grid.text(title, vp = viewport(
-        layout.pos.row = 1, layout.pos.col = 1:ncol(layout)))
-    }
- 
-    for (i in 1:numPlots) {
-      # Get the i,j matrix positions of the regions that contain this subplot
-      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
- 
-      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
-                                      layout.pos.col = matchidx$col))
-    }
-  }
-}
 ```
 
 I'll be using the *isoperimetric quotient*, a common measure of compactness that compares the area of the shape to the area of a circle with the same perimeter. $$\frac{4\pi A}{P^2}$$With this measure, a value of 1 indicates the lake is nearly circular, and lower values represent less compactness.
-```{r}
+```{r }
 lakes <- lakes_poly %>%
   mutate(compactness = (4 * pi * Shape_Area) / (Shape_Length ** 2)) %>%
   arrange(-compactness) %>%
@@ -150,22 +91,22 @@ mid_compact_100 <- lakes %>%
 #100 most compact lakes in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
 staged1 <- stage_plots(most_compact_100, "lagoslakeid", "scale")
-p1      <- multiplot(plotlist = staged1, cols = 10)
+p1      <- cowplot::plot_grid(plotlist = staged1)
 ```
 
 #100 least compact lakes in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
 staged2 <- stage_plots(least_compact_100, "lagoslakeid")
-p2      <- multiplot(plotlist = staged2, cols = 10)
+p2      <- cowplot::plot_grid(plotlist = staged2)
 ```
 
 #100 lakes of median compactness in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
 staged3 <- stage_plots(mid_compact_100, "lagoslakeid")
-p3      <- multiplot(plotlist = staged3, cols = 10)
+p3      <- cowplot::plot_grid(plotlist = staged3)
 ```
 
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, eval=FALSE}
 #Prep the layers for leaflet
 proj_string <- "+proj=longlat +datum=WGS84"
 L.most_compact_100 <- most_compact_100 %>%
@@ -178,7 +119,7 @@ L.states <- states %>%
 ```
 
 #Where are the 100 **most** compact lakes?
-```{r, echo=FALSE, warning=FALSE, out.width="100%"}
+```{r, echo=FALSE, warning=FALSE, out.width="100%", eval=FALSE}
 popup_template <- "<b>GNIS Name:</b><br/>%s<br/><b>FCode:</b><br/>%s"
 
 (m1 <- leaflet() %>%
@@ -191,7 +132,7 @@ popup_template <- "<b>GNIS Name:</b><br/>%s<br/><b>FCode:</b><br/>%s"
 ```
 
 #Where are the 100 **least** compact lakes?
-```{r, echo=FALSE, warning=FALSE, out.width="100%"}
+```{r, echo=FALSE, warning=FALSE, out.width="100%", eval=FALSE}
 (m2 <- leaflet() %>%
    addProviderTiles(providers$Esri.WorldImagery, options=providerTileOptions(opacity=.75)) %>%
    addPolygons(data=L.states, weight = 2, opacity=.25, color="white", fill=NULL) %>%
@@ -202,9 +143,8 @@ popup_template <- "<b>GNIS Name:</b><br/>%s<br/><b>FCode:</b><br/>%s"
 
 ```
 
-
 #Are there compactness patterns across the United States?
-```{r, echo=FALSE, warning=FALSE, out.width="100%"}
+```{r, echo=FALSE, warning=FALSE, out.width="100%", eval=FALSE}
 lake_points <- st_centroid(lakes) %>%
   mutate(x = st_coordinates(.)[,"X"]) %>%
   mutate(y = st_coordinates(.)[,"Y"])
@@ -218,11 +158,9 @@ ggplot() +
 ```
 
 #Distribution of compactness.
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, eval=FALSE}
 (hist <- ggplot(data=lakes, aes(x=compactness)) +
    geom_histogram(alpha = .5, fill = "blue") +
    geom_vline(aes(xintercept=median(compactness)))
 )
 ```
-
-
