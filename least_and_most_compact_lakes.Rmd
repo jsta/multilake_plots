@@ -11,22 +11,61 @@ library(tidyverse)
 library(sf)
 library(leaflet)
 
-lakes_poly_file <- '../../LAGOS_US_GIS_Data_v0.3.gdb/LAGOS_US_All_Lakes_4ha'
-states_file <- '../../LAGOS_US_GIS_Data_v0.3.gdb/STATE'
+gdb <- "~/.local/share/LAGOS-GIS/LAGOS_US_GIS_Data_v0.1.gdb"
 
-lakes_poly <- st_read(dirname(lakes_poly_file), basename(lakes_poly_file), stringsAsFactors = FALSE) %>%
+lakes_poly_file <- 'LAGOS_US_All_Lakes_4ha'
+states_file     <- 'STATE'
+
+lakes_poly <- st_read(gdb, lakes_poly_file, stringsAsFactors = FALSE)
+lakes_poly <- lakes_poly %>%
   st_zm(drop=TRUE) %>%
   filter(Hectares >= 4) %>%
   mutate(FCode = factor(FCode)) %>%
   mutate(FType = factor(FType)) %>%
   select(Permanent_, GNIS_Name, AreaSqKm, ReachCode, FType, FCode, STATE, lagoslakeid, Shape_Area, Shape_Length)
 
-states <- st_read(dirname(states_file), basename(states_file)) %>%
+states <- st_read(gdb, states_file) %>%
   st_simplify(TRUE, 5000)
 ```
 
 I'll use the `multiplot` function from the [Cookbook for R](http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/) site with an [adaptation to add a title](http://www.guru-gis.net/multiplot-function-for-ggplot/).
-```{r functions, echo=FALSE, warning=FALSE, message=FALSE}
+```{r_functions, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Create a list of ggplots where the polygons share a common (largest) bbox size
+# Adapted from: http://rstudio-pubs-static.s3.amazonaws.com/2852_379274d7c5734f979e106dcf019ec46c.html
+stage_plots <- function(data, region = NULL, size = c("maxzoom", "scale")) {
+  !is.null(region) || stop("you must supply a region identifier")
+  
+  if(size == "scale"){
+    boxes <- list()
+    for (i in 1:nrow(data)) {
+      boxes[[i]] <- st_bbox(data[i,])
+    }
+    x_max_range <- max(as.vector(sapply(boxes, function(x) x['xmax'] - x['xmin'])))
+    y_max_range <- max(as.vector(sapply(boxes, function(x) x['ymax'] - x['ymin'])))
+    max_dim     <- max(y_max_range, x_max_range)
+  }
+  
+  plots <- list()
+  for(i in 1:nrow(data)){
+    plot_item <- data[i,] %>% as("Spatial") %>% fortify(region = region)
+    plot      <- ggplot(plot_item) + 
+                    geom_polygon(aes(x = long, y = lat, group = group), 
+                            fill = 'lightsteelblue3', color = 'dodgerblue4') +
+                    theme_void() + coord_fixed()
+    
+    if(size == "scale"){
+      centroid <- data[i,] %>% st_centroid() %>% st_coordinates()
+      x_limits <- c(centroid[,'X'] + .5 * max_dim, centroid[,'X'] - .5 * max_dim)
+      y_limits <- c(centroid[,'Y'] + .5 * max_dim, centroid[,'Y'] - .5 * max_dim)
+      plot <- plot +
+        xlim(x_limits) + ylim(y_limits)
+    }
+    plots[[i]] <- plot
+  }
+  return(plots)
+}
+
 ## From R cookbook
 # Multiple plot function
 #
@@ -38,38 +77,41 @@ I'll use the `multiplot` function from the [Cookbook for R](http://www.cookbook-
 # then plot 1 will go in the upper left, 2 will go in the upper right, and
 # 3 will go all the way across the bottom.
 #
-multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL, title="") {
+multiplot <- function(..., plotlist = NULL, file, cols = 1, layout = NULL, 
+                      title = "") {
   require(grid)
- 
-  # Make a list from the ... arguments and plotlist
-  plots <- c(list(...), plotlist)
- 
-  numPlots = length(plots)
+  plots    <- c(list(...), plotlist)
+  numPlots <- length(plots)
  
   # If layout is NULL, then use 'cols' to determine layout
-  if (is.null(layout)) {
-    # Make the panel
-    # ncol: Number of columns of plots
-    # nrow: Number of rows needed, calculated from # of cols
-    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+  if(is.null(layout)){
+    layout <- matrix(seq(1, cols * ceiling(numPlots / cols)),
                      ncol = cols, nrow = ceiling(numPlots/cols))
   }
  
-  if (nchar(title)>0){
-    layout<-rbind(rep(0, ncol(layout)), layout)
+  if(nchar(title) > 0){
+    layout <- rbind(rep(0, ncol(layout)), layout)
   }
  
-  if (numPlots==1) {
+  if(numPlots == 1){
     print(plots[[1]])
- 
-  } else {
-    # Set up the page
+  }else{
     grid.newpage()
-    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout), heights =if(nchar(title)>0){unit(c(0.5, rep(5,nrow(layout)-1)), "null")}else{unit(c(rep(5, nrow(layout))), "null")} )))
+    
+    pushViewport(viewport(
+      layout = grid.layout(
+                      nrow(layout), 
+                      ncol(layout), 
+                      heights = if(nchar(title) > 0){
+                                    unit(c(0.5, rep(5, nrow(layout) - 1)), "null") 
+                                  }else{
+                                    unit(c(rep(5, nrow(layout))), "null")
+                                  })))
  
     # Make each plot, in the correct location
-    if (nchar(title)>0){
-      grid.text(title, vp = viewport(layout.pos.row = 1, layout.pos.col = 1:ncol(layout)))
+    if(nchar(title) > 0){
+      grid.text(title, vp = viewport(
+        layout.pos.row = 1, layout.pos.col = 1:ncol(layout)))
     }
  
     for (i in 1:numPlots) {
@@ -81,46 +123,12 @@ multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL, title="") {
     }
   }
 }
-
-# With help from http://rstudio-pubs-static.s3.amazonaws.com/2852_379274d7c5734f979e106dcf019ec46c.html
-stage_plots <- function(data, region=NULL, size = c("maxzoom", "scale")) {
-  size = match.arg(size)
-  !is.null(region) || stop("you must supply a region identifier")
-  if (size == "scale") {
-    boxes <- list()
-    for (i in 1:nrow(data)) {
-      boxes[[i]] <- st_bbox(data[i,])
-    }
-    x_max_range <- max(as.vector(sapply(boxes, function(x) x['xmax'] - x['xmin'])))
-    y_max_range <- max(as.vector(sapply(boxes, function(x) x['ymax'] - x['ymin'])))
-    max_dim <- max(y_max_range, x_max_range)
-  }
-  plots <- list()
-  for (i in 1:nrow(data)) {
-    plot_item <- data[i,] %>% as("Spatial") %>% fortify(region=region)
-    plot <- ggplot(plot_item) + 
-      geom_polygon(aes(x=long, y=lat, group=group), fill = 'lightsteelblue3', color = 'dodgerblue4') +
-      theme_void() +
-      coord_fixed()
-    if (size == "scale") {
-      centroid <- data[i,] %>% st_centroid() %>% st_coordinates()
-      x_limits <- c(centroid[,'X'] + .5*max_dim, centroid[,'X'] - .5*max_dim)
-      y_limits <- c(centroid[,'Y'] + .5*max_dim, centroid[,'Y'] - .5*max_dim)
-      plot <- plot +
-        xlim(x_limits) + 
-        ylim(y_limits)
-    }
-    plots[[i]] <- plot
-  }
-  return(plots)
-}
-
 ```
 
 I'll be using the *isoperimetric quotient*, a common measure of compactness that compares the area of the shape to the area of a circle with the same perimeter. $$\frac{4\pi A}{P^2}$$With this measure, a value of 1 indicates the lake is nearly circular, and lower values represent less compactness.
 ```{r}
 lakes <- lakes_poly %>%
-  mutate(compactness = (4*pi*Shape_Area)/(Shape_Length**2)) %>%
+  mutate(compactness = (4 * pi * Shape_Area) / (Shape_Length ** 2)) %>%
   arrange(-compactness) %>%
   mutate(compact_rank = row_number())
 ```
@@ -133,28 +141,28 @@ most_compact_100 <- lakes %>%
 least_compact_100 <- lakes %>%
   top_n(100, compact_rank)
 
-midpoint <- floor(nrow(lakes)/2)
+midpoint <- floor(nrow(lakes) / 2)
 
 mid_compact_100 <- lakes %>%
-  filter(between(compact_rank, midpoint-50, midpoint+49))
+  filter(between(compact_rank, midpoint - 50, midpoint + 49))
 ```
 
 #100 most compact lakes in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
 staged1 <- stage_plots(most_compact_100, "lagoslakeid", "scale")
-p1 <- multiplot(plotlist=staged1, cols=10)
+p1      <- multiplot(plotlist = staged1, cols = 10)
 ```
 
 #100 least compact lakes in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
 staged2 <- stage_plots(least_compact_100, "lagoslakeid")
-p2 <- multiplot(plotlist=staged2, cols=10)
+p2      <- multiplot(plotlist = staged2, cols = 10)
 ```
 
 #100 lakes of median compactness in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
 staged3 <- stage_plots(mid_compact_100, "lagoslakeid")
-p3 <- multiplot(plotlist=staged3, cols=10)
+p3      <- multiplot(plotlist = staged3, cols = 10)
 ```
 
 ```{r, echo=FALSE, warning=FALSE, message=FALSE}
