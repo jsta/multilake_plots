@@ -76,32 +76,25 @@ lakes <- lakes_poly %>%
 
 Prepare a few subsets for plotting.
 ```{r}
-most_compact_100 <- lakes %>%
-  top_n(-100, compact_rank)
-
-least_compact_100 <- lakes %>%
-  top_n(100, compact_rank)
-
-midpoint <- floor(nrow(lakes) / 2)
-
-mid_compact_100 <- lakes %>%
-  filter(between(compact_rank, midpoint - 50, midpoint + 49))
+top_100 <- lakes %>%
+  top_n(100, AreaSqKm) %>%
+  arrange(desc(AreaSqKm))
 ```
 
-#100 most compact lakes in LAGOS (4ha+):
+#100 largest lakes in LAGOS (4ha+):
 ```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
-staged1 <- stage_plots(most_compact_100, "lagoslakeid", "scale")
+staged1 <- stage_plots(top_100, "lagoslakeid", "scale")
 p1      <- cowplot::plot_grid(plotlist = staged1)
 ```
 
 #100 least compact lakes in LAGOS (4ha+):
-```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%", eval=FALSE}
 staged2 <- stage_plots(least_compact_100, "lagoslakeid")
 p2      <- cowplot::plot_grid(plotlist = staged2)
 ```
 
 #100 lakes of median compactness in LAGOS (4ha+):
-```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%"}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, out.width="100%", eval=FALSE}
 staged3 <- stage_plots(mid_compact_100, "lagoslakeid")
 p3      <- cowplot::plot_grid(plotlist = staged3)
 ```
